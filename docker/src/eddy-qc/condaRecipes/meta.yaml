@@ -1,0 +1,44 @@
+{% set data = load_setup_py_data() %}
+package:
+  name: eddy_qc
+  version: {{ data['version']}}
+
+build:
+   noarch: python
+   script: python setup.py install --single-version-externally-managed --record=record.txt
+
+source:
+  path: ../
+
+requirements:
+  build:
+    - python >2
+    - setuptools
+    {% for package in data.get('setup_requires', {}) %}
+    - {{ package.lower() }}
+    {% endfor %}
+
+  run:
+    - python >2
+    {% for package in data.get('install_requires', {}) %}
+    - {{ package.lower() }}
+    {% endfor %}
+
+  run_constrained:
+    {% for name, pkgs in data.get('extras_require', dict()).items() %}
+    {% for package in pkgs %}
+    - {{ package.lower() }}
+    {% endfor %}
+    {% endfor %}
+
+{% if 'test_suite' in data %}
+test:
+  requires:
+    {% for package in data.get('setup_requires', {}) %}
+    - {{ package.lower() }}
+    {% endfor %}    
+  source_files:
+    - {{ data['test_suite'] }}
+  commands:
+    - python -m pytest {{ data['test_suite'] }}
+{% endif %}
