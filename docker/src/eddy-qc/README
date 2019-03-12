@@ -1,1 +1,108 @@
+-------------------------------------------
+EDDY QC
+Matteo Bastiani, FMRIB
+August, 2017
+-------------------------------------------
+Automated tools based on FSL's eddy to perform quality assessment on diffusion mri (dMRI) datasets.
 
+Installation
+------------
+The eddy qc tools will be distributed with FSL.
+
+If you want to install the tools within your python (>= 3.5) environment, once the library has been downloaded, run:
+cd /path-to-lib/eddy_qc
+python setup.py install 
+
+Wiki page
+---------
+https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/eddyqc 
+
+
+-------------------------------------------
+QUAD (QUality Assessment for DMRI)
+-------------------------------------------
+Generates a QC report pdf and stores the QC indices in a .json file for single subject dMRI data.
+
+The script will look for eddy output files that have been generated according to the user-specified options. If a feature, e.g., output the CNR maps, has not been used, then no CNR page will be added to the final report.
+The script also produces a qc.json file that contains summery qc indices and basic information about the data. The JSON file can then be read by SQUAD to generate a group report. 
+
+Compulsory arguments:
+       eddyBase             Basename (including path) specified when running EDDY
+       -idx, --eddyIdx      File containing indices for all volumes into acquisition parameters
+       -par, --eddyParams   File containing acquisition parameters
+       -m, --mask           Binary mask file
+       -b, --bvals          b-values file
+   
+Optional arguments:
+       -g, --bvecs          b-vectors file - only used when <eddyBase>.eddy_residuals file is present
+       -o, --output-dir     Output directory - default = '<eddyBase>.qc'
+       -f, --field          TOPUP estimated field (in Hz)
+       -s, -slspec          Text file containing acquisition details
+       -v, --verbose        Display debug messages
+
+Output:
+       output-dir/qc.pdf: single subject QC report 
+       output-dir/qc.json: single subject QC and data info database
+       output-dir/vols_no_outliers.txt: text file that contains the list of the non-outlier volumes (based on eddy residuals)
+
+Examples
+--------
+cd folder-where-eddy-output-is
+Assuming eddy basename is "eddy_corrected"
+
+Minimal running style:
+	eddy_quad eddy_corrected -idx eddyIndex.txt -par acqparams.txt -m nodif_brain_mask.nii.gz -b bvals
+	This will make a eddy_corrected.qc folder, where qc.pdf and qc.json will be stored.
+Complete running style:
+	 eddy_quad eddy_corrected -idx eddyIndex.txt -par acqparams.txt -m nodif_brain_mask.nii.gz -b bvals -g bvecs -f fieldmap.nii.gz -o qc_output_dir
+	 This will make a qc_output_dir folder, where qc.pdf and qc.json will be stored. As bvecs were specified, the tool will also generate "clean" (i.e., outliers free) bvecs and bvals files, based on the eddy_residuals. A voxel displacement map will be obtained using the provided fieldmap (in Hz) and the standard deviation of the voxel displacement within the masked volume will be stored.
+
+To clean the dataset, i.e., removing the outliers, run:
+fslselectvols -i eddy_corrected -o eddy_corrected_clean --vols=qc_output_dir/vols_no_outliers.txt
+
+
+-------------------------------------------
+SQUAD (Study-wise QUality Assessment for DMRI)
+-------------------------------------------
+Generates a QC report pdf and database for whole-study dMRI data.
+Updates single subject's report based on the study-specific database or using a previously generated one from a different study.
+Groups the distributions of the QC indices based on a user-specified grouping variable.
+
+The script will look for QUAD .json output files that are generated at the locations specified by the user in a text file.
+
+Compulsory arguments:
+       list                          Text file containing a list of squad qc folders
+   
+Optional arguments:
+       -g, --grouping                Text file containing grouping variable for the listed subjects
+       -u, --update [group_db.json]  Update existing eddy_squad reports after generating group report or using a pre-existing [group_db.json] one
+       -gdb, --group-db              Text file containing grouping variable for the database subjects
+       -o, --output-dir              Output directory - default = '<eddyBase>.qc' 
+
+Output:
+       output-dir/group_qc.pdf: study-wise QC report 
+       output-dir/group_db.json: study-wise QC database
+
+Examples
+--------
+Assuming qc_folders.txt file is structured as:
+subj1/eddy_corrected.qc
+subj2/eddy_corrected.qc
+subj3/eddy_corrected.qc
+...
+and group.txt file is structured as (first row is the label):
+Group
+1
+0
+1
+...
+
+Minimal running style:
+	eddy_squad qc_folders.txt
+	This will generate a quad directory where group_db.json (database) and group_qc.pdf (report) will be stored.
+Complete running style:
+	 eddy_squad qc_folders.txt -u -g group.txt -o quad_group
+	 This will generate a quad_group directory where group_db.json (database) and group_qc.pdf (report) will be stored. Individual subjects' QC reports previously generated by QUAD will be updated by adding extra pages that will show the single sunject in the context of the study and marking QC indices as outliers in the tables where needed. Extra pages will be added to the report where distributions for individual QC indices will account for the specified grouping variable.
+Using a previously generated database:
+      eddy_squad qc_folders.txt -u study/group_db.json -g group.txt -gdb group_db.txt -o quad_group
+      Same as before, but this time we are using a previously generated database to update the single subject reports. !!!NB!!! If using a grouping variable, it is required to specify the same grouping variable for the subjects of the previously generated database as a different variable.
