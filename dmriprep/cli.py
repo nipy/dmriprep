@@ -88,7 +88,11 @@ def main(participant_label, bids_dir, output_dir,
             is_hemi = is_bval_bvec_hemispherical(subject_inputs['bval_file'], subject_inputs['bvec_file'])
             if is_hemi:
                 # run the dmriprep without topup workflow
-                raise NotImplementedError('we still need to unwire TOPUP from our workflow')
+                run.run_dmriprep_no_pe_with_eddy(**subject_inputs,
+                                    working_dir=os.path.join(output_dir, 'scratch'),
+                                    out_dir=output_dir,
+                                    eddy_niter=eddy_niter,
+                                    slice_outlier_threshold=slice_outlier_threshold)
             else:
                 run.run_dmriprep(**subject_inputs,
                                  working_dir=os.path.join(output_dir, 'scratch'),
