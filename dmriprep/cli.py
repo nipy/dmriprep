@@ -10,6 +10,7 @@ import click
 from . import io
 from . import run
 from .data import get_dataset
+from .utils import is_bval_bvec_hemispherical
 
 # Filter warnings that are visible whenever you import another package that
 # was compiled against an older numpy than is installed.
@@ -69,11 +70,30 @@ def main(participant_label, bids_dir, output_dir,
     inputs = io.get_bids_files(participant_label, bids_dir)
 
     for subject_inputs in inputs:
-        run.run_dmriprep_pe(**subject_inputs,
-                            working_dir=os.path.join(output_dir, 'scratch'),
-                            out_dir=output_dir,
-                            eddy_niter=eddy_niter,
-                            slice_outlier_threshold=slice_outlier_threshold)
+        # decide which workflow to run depending on inputs
+        if (subject_inputs['dwi_file_AP'] and subject_inputs['dwi_file_PA']):
+            # run the pe dmriprep workflow
+                run.run_dmriprep_pe(**subject_inputs,
+                                    working_dir=os.path.join(output_dir, 'scratch'),
+                                    out_dir=output_dir,
+                                    eddy_niter=eddy_niter,
+                                    slice_outlier_threshold=slice_outlier_threshold)
+        else:
+            print('''
+                WARNING: no AP/PA files found, so we won't use TOPUP. If this isn't right, check that
+                your files follow the BIDS format.
+            ''')
+            # check hemispheres, to see whether we run eddy or not.
+            # if we don't run eddy, we use run.run_dmriprep()
+            is_hemi = is_bval_bvec_hemispherical(subject_inputs['bval_file'], subject_inputs['bvec_file'])
+            if is_hemi:
+                # run the dmriprep without topup workflow
+                raise NotImplementedError('we still need to unwire TOPUP from our workflow')
+            else:
+                run.run_dmriprep(**subject_inputs,
+                                 working_dir=os.path.join(output_dir, 'scratch'),
+                                 out_dir=output_dir,)
+
 
     return 0
 

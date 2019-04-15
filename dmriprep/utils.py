@@ -5,6 +5,8 @@ Utility functions for other submodules
 import itertools
 
 import numpy as np
+import logging
+from dipy.io import read_bvals_bvecs
 
 
 mod_logger = logging.getLogger(__name__)
@@ -64,3 +66,7 @@ def is_hemispherical(vecs):
     else:
         pole = np.array([0.0, 0.0, 0.0])
     return is_hemi, pole
+
+def is_bval_bvec_hemispherical(bval_file, bvec_file):
+    _, bvecs = read_bvals_bvecs(bval_file, bvec_file)
+    return is_hemispherical(bvecs[1:])

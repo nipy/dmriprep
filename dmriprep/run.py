@@ -4,7 +4,7 @@ from shutil import copyfile
 
 
 def run_dmriprep(dwi_file, bvec_file, bval_file,
-                 subjects_dir, working_dir, out_dir):
+                 subjects_dir, working_dir, out_dir, **kwargs):
 
     """
     Runs dmriprep for acquisitions with just one PE direction.
