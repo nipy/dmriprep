@@ -17,3 +17,4 @@ dependencies:
      - "--editable=git+https://git.fmrib.ox.ac.uk/matteob/eddy_qc_release@57bb11da6a634c4195593fbc439ba9f8998157b0#egg=eddy_qc"
      - bids
      - duecredit
+     - awscli
