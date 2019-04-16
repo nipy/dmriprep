@@ -78,6 +78,7 @@ RUN export ND_ENTRYPOINT="/neurodocker/startup.sh" \
 
 ENTRYPOINT ["/neurodocker/startup.sh"]
 
+# FSL
 ENV FSLDIR="/opt/fsl-5.0.11" \
     PATH="/opt/fsl-5.0.11/bin:$PATH"
 RUN apt-get update -qq \
@@ -111,31 +112,7 @@ RUN apt-get update -qq \
     && echo "Installing FSL conda environment ..." \
     && bash /opt/fsl-5.0.11/etc/fslconf/fslpython_install.sh -f /opt/fsl-5.0.11
 
-ENV CONDA_DIR="/opt/miniconda-latest" \
-    PATH="/opt/miniconda-latest/bin:$PATH"
-RUN export PATH="/opt/miniconda-latest/bin:$PATH" \
-    && echo "Downloading Miniconda installer ..." \
-    && conda_installer="/tmp/miniconda.sh" \
-    && curl -fsSL --retry 5 -o "$conda_installer" https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh \
-    && bash "$conda_installer" -b -p /opt/miniconda-latest \
-    && rm -f "$conda_installer" \
-    && conda update -yq -nbase conda \
-    && conda config --system --prepend channels conda-forge \
-    && conda config --system --set auto_update_conda false \
-    && conda config --system --set show_channel_urls true \
-    && sync && conda clean -tipsy && sync
-#    && conda create -y -q --name dmriprep
-
-# RUN conda install -y -q --name dmriprep \
-#            -c \
-#            conda-forge \
-#            python=3.6 \
-#            nipype \
-#            dipy \
-#            boto3 \
-#     && sync && conda clean -tipsy && sync
-
-
+# FREESURFER
 ENV FREESURFER_HOME="/opt/freesurfer-6.0.0" \
     PATH="/opt/freesurfer-6.0.0/bin:$PATH"
 
@@ -170,16 +147,28 @@ RUN apt-get update -qq \
 
 COPY ./license.txt /opt/freesurfer-6.0.0/license.txt
 
-#&& sync && conda clean -tipsy && sync
+# CONDA
+ENV CONDA_DIR="/opt/miniconda-latest" \
+    PATH="/opt/miniconda-latest/bin:$PATH"
+RUN export PATH="/opt/miniconda-latest/bin:$PATH" \
+    && echo "Downloading Miniconda installer ..." \
+    && conda_installer="/tmp/miniconda.sh" \
+    && curl -fsSL --retry 5 -o "$conda_installer" https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+    && bash "$conda_installer" -b -p /opt/miniconda-latest \
+    && rm -f "$conda_installer" \
+    && conda update -yq -nbase conda \
+    && conda config --system --prepend channels conda-forge \
+    && conda config --system --set auto_update_conda false \
+    && conda config --system --set show_channel_urls true \
+    && sync && conda clean -tipsy && sync
 
 RUN apt-get update && apt-get install -y git gcc libopenblas-base
+ENV LD_LIBRARY_PATH=/usr/lib/openblas-base/
+
 ADD environment.yml environment.yml
 RUN conda env create -f environment.yml
 
-ENV LD_LIBRARY_PATH=/usr/lib/openblas-base/
-
 RUN sed -i '$isource activate dmriprep' $ND_ENTRYPOINT
-
 
 RUN echo '{ \
     \n  "pkg_manager": "apt", \

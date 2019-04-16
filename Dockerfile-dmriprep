@@ -3,4 +3,5 @@ FROM dmriprep:dev
 ADD . /dmriprep
 WORKDIR /dmriprep
 RUN /neurodocker/startup.sh python setup.py install
-WORKDIR /
+RUN /neurodocker/startup.sh python -m ipykernel install --user --name dmriprep --display-name "Python (dmriprep)"
+WORKDIR /home/jovyan/
