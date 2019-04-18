@@ -167,6 +167,8 @@ ENV LD_LIBRARY_PATH=/usr/lib/openblas-base/
 
 ADD environment.yml environment.yml
 RUN conda env create -f environment.yml
+ADD requirements.txt requirements.txt
+RUN pip install -r requirements.txt
 
 RUN sed -i '$isource activate dmriprep' $ND_ENTRYPOINT
 
