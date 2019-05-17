@@ -5,7 +5,8 @@
 
 import numpy as np
 
-from dmriprep.utils import is_hemispherical
+from dmriprep.utils import is_hemispherical, is_bval_bvec_hemispherical
+import dipy.data as dpd
 
 
 def uniform_points_on_sphere(npoints=1, hemisphere=True, rotate=(0, 0, 0)):
@@ -58,3 +59,11 @@ def test_is_hemispherical():
     assert is_hemispherical(vecs)[0]
     vecs = uniform_points_on_sphere(npoints=100, hemisphere=False)
     assert not is_hemispherical(vecs)[0]
+
+
+def test_is_bval_bvec_hemispherical():
+    data_fname, bval_fname, bvec_fname = dpd.get_fnames()
+    is_it = is_bval_bvec_hemispherical(bval_file=bval_fname,
+                                       bvec_file=bvec_fname)
+    # It should be!
+    assert is_it

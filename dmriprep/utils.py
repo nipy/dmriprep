@@ -6,13 +6,13 @@ import itertools
 
 import numpy as np
 import logging
-from dipy.io import read_bvals_bvecs
+from dipy.core.gradients import gradient_table
 
 
 mod_logger = logging.getLogger(__name__)
 
 
-def is_hemispherical(vecs):
+def is_hemispherical(vecs, atol=10e-4):
     """Test whether all points on a unit sphere lie in the same hemisphere.
 
     Parameters
@@ -20,6 +20,10 @@ def is_hemispherical(vecs):
     vecs : numpy.ndarray
         2D numpy array with shape (N, 3) where N is the number of points.
         All points must lie on the unit sphere.
+
+    atol : float, optional
+        Tolerance for comparison of verification that vectors are unit
+        length.
 
     Returns
     -------
@@ -37,7 +41,7 @@ def is_hemispherical(vecs):
     """
     if vecs.shape[1] != 3:
         raise ValueError("Input vectors must be 3D vectors")
-    if not np.allclose(1, np.linalg.norm(vecs, axis=1)):
+    if not np.allclose(1, np.linalg.norm(vecs, axis=1), atol=atol):
         raise ValueError("Input vectors must be unit vectors")
 
     # Generate all pairwise cross products
@@ -67,6 +71,46 @@ def is_hemispherical(vecs):
         pole = np.array([0.0, 0.0, 0.0])
     return is_hemi, pole
 
-def is_bval_bvec_hemispherical(bval_file, bvec_file):
-    _, bvecs = read_bvals_bvecs(bval_file, bvec_file)
-    return is_hemispherical(bvecs[1:])
+
+def is_bval_bvec_hemispherical(gtab=None, bval_file=None, bvec_file=None,
+                               atol=10e-4):
+    """
+    Test whether all points on a unit sphere lie in the same hemisphere
+    for a DIPY GradientTable object or bval and bvec files
+
+    Parameters
+    ----------
+    gtab : a DIPY GradientTable object, optional
+
+    bval_file : str, optional
+       Full path to a file with b-values.
+
+    bvec_file : str, optional
+       Full path to a file with b-vectors.
+
+    atol : float
+
+    Returns
+    -------
+    is_hemi : bool
+        If True, one can find a hemisphere that contains all the points.
+        If False, then the points do not lie in any hemisphere
+
+    pole : numpy.ndarray
+        If `is_hemi == True`, then pole is the "central" pole of the
+        input vectors. Otherwise, pole is the zero vector.
+    """
+    if gtab is None:
+        if bval_file is None or bvec_file is None:
+            raise ValueError("`is_bval_bvec_hemispherical` requires",
+                             "either a GradientTable object or full paths",
+                             "as input")
+        gtab = gradient_table(bval_file, bvec_file)
+
+    else:
+        if bval_file is not None or bvec_file is not None:
+            raise ValueError("`is_bval_bvec_hemispherical takes` either ",
+                             "a GradientTable object or full paths, but not ",
+                             "both")
+
+    return is_hemispherical(gtab.bvecs[~gtab.b0s_mask], atol=atol)
