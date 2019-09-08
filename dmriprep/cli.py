@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 
 @click.command()
-@click.option('--participant-label',
+@click.option('--participant_label',
               help="The label(s) of the participant(s) that should be"
                    "analyzed. The label corresponds to"
                    "sub-<participant_label> from the BIDS spec (so it does"
@@ -26,29 +26,38 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
                    "all subjects will be analyzed. Multiple participants"
                    "can be specified with a space separated list.",
               default=None)
-@click.option('--eddy-niter',
-              help="Fixed number of eddy iterations. See "
-                   "https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/eddy/UsersGuide"
-                   "#A--niter",
-              default=5, type=(int))
-@click.option('--slice-outlier-threshold',
+@click.option('--session',
+              help="The session number off the participant data in the case of multiple sessions.",
+              default=1)
+@click.option('--denoise_strategy',
+              help="Denoising strategy. Options are: mppca, localpca, or nlmeans.",
+              default="mppca")
+@click.option('--slice_outlier_threshold',
               help="Number of allowed outlier slices per volume. "
                    "If this is exceeded the volume is dropped from analysis. "
                    "If an int is provided, it is treated as number of allowed "
                    "outlier slices. If a float between 0 and 1 "
                    "(exclusive) is provided, it is treated the fraction of "
                    "allowed outlier slices.",
-              default=0.02)
+              default=0.05)
 @click.argument('bids_dir',
                 )
 @click.argument('output_dir',
                 )
+@click.option('--plugin',
+              help="Scheduling plugin type. Default is MultiProc.",
+              default="MultiProc")
+@click.option('--vox',
+              help="Voxel resolution. Default is 2mm.",
+              default='2mm')
+@click.option('--verbose',
+              help="Verbose logging. Default is False.",
+              default=False)
 @click.argument('analysis_level',
                 type=click.Choice(['participant', 'group']),
                 default='participant')
-def main(participant_label, bids_dir, output_dir,
-         eddy_niter=5, slice_outlier_threshold=0.02,
-         analysis_level="participant"):
+def main(participant_label, session, bids_dir, output_dir, plugin_type='MultiProc', verbose=False,
+         denoise_strategy="mppca", slice_outlier_threshold=0.05, vox_size='2mm', analysis_level="participant"):
     """
     BIDS_DIR: The directory with the input dataset formatted according to
     the BIDS standard.
@@ -66,20 +75,24 @@ def main(participant_label, bids_dir, output_dir,
         raise NotImplementedError('The only valid analysis level for dmriprep '
                                   'is participant at the moment.')
 
-    inputs = io.get_bids_files(participant_label, bids_dir)
+    from dmriprep.io import get_bids_layout
 
-    for subject_inputs in inputs:
-        run.run_dmriprep_pe(**subject_inputs,
-                            working_dir=os.path.join(output_dir, 'scratch'),
-                            out_dir=output_dir,
-                            eddy_niter=eddy_niter,
-                            slice_outlier_threshold=slice_outlier_threshold)
+    sub_dict = get_bids_layout(bids_dir, participant_label, session)
+    dwi = sub_dict[session]['dwi']
+    fbvec = sub_dict[session]['bvec']
+    fbval = sub_dict[session]['bval']
+    metadata = sub_dict[session]['metadata']
+
+    wf = run.init_single_subject_wf(dwi, fbvec, fbval, metadata, out_dir=output_dir, strategy=denoise_strategy,
+                                    vox_size=vox_size, plugin_type=plugin_type, outlier_thresh=slice_outlier_threshold,
+                                    verbose=verbose)
+    wf.run()
 
     return 0
 
+
 @click.command()
-@click.argument('output_dir',
-                )
+@click.argument('output_dir')
 @click.option('--subject', help="subject id to download (will choose 1 subject if not specified",
               default="sub-NDARBA507GCT")
 @click.option('--study', help="which study to download. Right now we only support the HBN dataset",
@@ -126,7 +139,7 @@ def upload(output_dir, bucket, access_key, secret_key, provider='s3', subject=No
         output_dir += '/'
 
     if provider == 's3' or provider == 'S3':
-        client = boto3.client('s3',  aws_access_key_id=access_key, aws_secret_access_key=secret_key)
+        client = boto3.client('s3', aws_access_key_id=access_key, aws_secret_access_key=secret_key)
 
         if subject is not None:
             assert os.path.exists(os.path.join(output_dir, subject)), 'this subject id does not exist!'

@@ -2,10 +2,8 @@
 Utility functions for other submodules
 
 """
-import itertools
-
 import numpy as np
-
+from nipype import logging
 
 mod_logger = logging.getLogger(__name__)
 
@@ -33,6 +31,8 @@ def is_hemispherical(vecs):
     ----------
     https://rstudio-pubs-static.s3.amazonaws.com/27121_a22e51b47c544980bad594d5e0bb2d04.html  # noqa
     """
+    import itertools
+
     if vecs.shape[1] != 3:
         raise ValueError("Input vectors must be 3D vectors")
     if not np.allclose(1, np.linalg.norm(vecs, axis=1)):
@@ -64,3 +64,14 @@ def is_hemispherical(vecs):
     else:
         pole = np.array([0.0, 0.0, 0.0])
     return is_hemi, pole
+
+
+def merge_dicts(x, y):
+    """
+    A function to merge two dictionaries, making it easier for us to make
+    modality specific queries for dwi images (since they have variable
+    extensions due to having an nii.gz, bval, and bvec file).
+    """
+    z = x.copy()
+    z.update(y)
+    return z

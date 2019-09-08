@@ -16,7 +16,6 @@ from dask import compute, delayed
 from dask.diagnostics import ProgressBar
 from tqdm.auto import tqdm
 
-
 mod_logger = logging.getLogger(__name__)
 
 
@@ -179,12 +178,13 @@ def _cumulative_paths(path_parts, add_ext=""):
     except IndexError:
         pass
 
-    return [''.join(path_parts[:i+1]) + add_ext
+    return [''.join(path_parts[:i + 1]) + add_ext
             for i in range(len(path_parts))]
 
 
 class Study:
     """A dMRI based study with a BIDS compliant directory structure"""
+
     def __init__(self, study_id, bucket, s3_prefix, subjects=None):
         """Initialize a Study instance
 
@@ -293,7 +293,6 @@ class Study:
         else:
             self._n_discarded = len([s for s in subjects if not s.valid])
 
-
     @property
     def study_id(self):
         """An identifier string for the study"""
@@ -391,6 +390,7 @@ class S3BidsStudy(Study):
     """
 
     """
+
     def __init__(self, study_id, bucket, s3_prefix=None,
                  subjects=None):
         """
@@ -427,8 +427,6 @@ class S3BidsStudy(Study):
         # XXX Ariel will figure this out.
 
 
-
-
 class HBN(Study):
     """The HBN study
 
@@ -436,6 +434,7 @@ class HBN(Study):
     --------
     dmriprep.data.Study
     """
+
     def __init__(self, subjects=None):
         """Initialize the HBN instance
 
@@ -463,6 +462,7 @@ class HBN(Study):
         dict
             dict with participant_id as keys and site_id as values
         """
+
         def get_site_tsv_keys(site_id):
             pre = 'data/Projects/HBN/MRI/'
             raw = pre + f'{site_id}/participants.tsv'
@@ -568,6 +568,7 @@ class HBN(Study):
 
 class Subject:
     """A single dMRI study subject"""
+
     def __init__(self, subject_id, study, site=None):
         """Initialize a Subject instance
 

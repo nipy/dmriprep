@@ -16,11 +16,6 @@ import warnings
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
-from . import data
-from . import io
-from . import qc
-from . import run
-
 module_logger = logging.getLogger(__name__)
 
 # get the log level from environment variable
