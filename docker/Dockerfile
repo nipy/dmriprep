@@ -7,7 +7,46 @@
 #
 #     https://github.com/kaczmarj/neurodocker
 
-FROM debian:stretch
+FROM jupyter/datascience-notebook:8d22c86ed4d7
+
+# Neurodebian:
+
+USER root
+# https://bugs.debian.org/830696 (apt uses gpgv by default in newer releases, rather than gpg)
+RUN set -x \
+	&& apt-get update \
+	&& { \
+		which gpg \
+		|| apt-get install -y --no-install-recommends gnupg \
+	; } \
+# Ubuntu includes "gnupg" (not "gnupg2", but still 2.x), but not dirmngr, and gnupg 2.x requires dirmngr
+# so, if we're not running gnupg 1.x, explicitly install dirmngr too
+	&& { \
+		gpg --version | grep -q '^gpg (GnuPG) 1\.' \
+		|| apt-get install -y --no-install-recommends dirmngr \
+	; } \
+	&& rm -rf /var/lib/apt/lists/*
+
+# apt-key is a bit finicky during "docker build" with gnupg 2.x, so install the repo key the same way debian-archive-keyring does (/etc/apt/trusted.gpg.d)
+# this makes "apt-key list" output prettier too!
+RUN set -x \
+	&& export GNUPGHOME="$(mktemp -d)" \
+	&& gpg --keyserver ha.pool.sks-keyservers.net --recv-keys DD95CC430502E37EF840ACEEA5D32F012649A5A9 \
+	&& gpg --export DD95CC430502E37EF840ACEEA5D32F012649A5A9 > /etc/apt/trusted.gpg.d/neurodebian.gpg \
+	&& rm -rf "$GNUPGHOME" \
+	&& apt-key list | grep neurodebian
+
+RUN mkdir ~/.gnupg
+RUN echo "disable-ipv6" >> ~/.gnupg/dirmngr.conf
+
+RUN { \
+	echo 'deb http://neuro.debian.net/debian stretch main'; \
+	echo 'deb http://neuro.debian.net/debian data main'; \
+	echo '#deb-src http://neuro.debian.net/debian-devel stretch main'; \
+} > /etc/apt/sources.list.d/neurodebian.sources.list
+
+RUN sed -i -e 's,main *$,main contrib non-free,g' /etc/apt/sources.list.d/neurodebian.sources.list /etc/apt/sources.list
+
 
 ARG DEBIAN_FRONTEND="noninteractive"
 
@@ -39,6 +78,7 @@ RUN export ND_ENTRYPOINT="/neurodocker/startup.sh" \
 
 ENTRYPOINT ["/neurodocker/startup.sh"]
 
+# FSL
 ENV FSLDIR="/opt/fsl-5.0.11" \
     PATH="/opt/fsl-5.0.11/bin:$PATH"
 RUN apt-get update -qq \
@@ -52,7 +92,6 @@ RUN apt-get update -qq \
            libglu1-mesa-dev \
            libgomp1 \
            libice6 \
-           libmng1 \
            libxcursor1 \
            libxft2 \
            libxinerama1 \
@@ -73,31 +112,7 @@ RUN apt-get update -qq \
     && echo "Installing FSL conda environment ..." \
     && bash /opt/fsl-5.0.11/etc/fslconf/fslpython_install.sh -f /opt/fsl-5.0.11
 
-ENV CONDA_DIR="/opt/miniconda-latest" \
-    PATH="/opt/miniconda-latest/bin:$PATH"
-RUN export PATH="/opt/miniconda-latest/bin:$PATH" \
-    && echo "Downloading Miniconda installer ..." \
-    && conda_installer="/tmp/miniconda.sh" \
-    && curl -fsSL --retry 5 -o "$conda_installer" https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh \
-    && bash "$conda_installer" -b -p /opt/miniconda-latest \
-    && rm -f "$conda_installer" \
-    && conda update -yq -nbase conda \
-    && conda config --system --prepend channels conda-forge \
-    && conda config --system --set auto_update_conda false \
-    && conda config --system --set show_channel_urls true \
-    && sync && conda clean -tipsy && sync
-#    && conda create -y -q --name dmriprep
-
-# RUN conda install -y -q --name dmriprep \
-#            -c \
-#            conda-forge \
-#            python=3.6 \
-#            nipype \
-#            dipy \
-#            boto3 \
-#     && sync && conda clean -tipsy && sync
-
-
+# FREESURFER
 ENV FREESURFER_HOME="/opt/freesurfer-6.0.0" \
     PATH="/opt/freesurfer-6.0.0/bin:$PATH"
 
@@ -132,16 +147,30 @@ RUN apt-get update -qq \
 
 COPY ./license.txt /opt/freesurfer-6.0.0/license.txt
 
-#&& sync && conda clean -tipsy && sync
+# CONDA
+ENV CONDA_DIR="/opt/miniconda-latest" \
+    PATH="/opt/miniconda-latest/bin:$PATH"
+RUN export PATH="/opt/miniconda-latest/bin:$PATH" \
+    && echo "Downloading Miniconda installer ..." \
+    && conda_installer="/tmp/miniconda.sh" \
+    && curl -fsSL --retry 5 -o "$conda_installer" https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+    && bash "$conda_installer" -b -p /opt/miniconda-latest \
+    && rm -f "$conda_installer" \
+    && conda update -yq -nbase conda \
+    && conda config --system --prepend channels conda-forge \
+    && conda config --system --set auto_update_conda false \
+    && conda config --system --set show_channel_urls true \
+    && sync && conda clean -tipsy && sync
 
 RUN apt-get update && apt-get install -y git gcc libopenblas-base
-ADD environment.yml environment.yml
-RUN conda env create -f environment.yml
-
 ENV LD_LIBRARY_PATH=/usr/lib/openblas-base/
 
-RUN sed -i '$isource activate dmriprep' $ND_ENTRYPOINT
+ADD environment.yml environment.yml
+RUN conda env create -f environment.yml
+ADD requirements.txt requirements.txt
+RUN pip install -r requirements.txt
 
+RUN sed -i '$isource activate dmriprep' $ND_ENTRYPOINT
 
 RUN echo '{ \
     \n  "pkg_manager": "apt", \
