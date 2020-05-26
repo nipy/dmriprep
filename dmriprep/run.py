@@ -4,7 +4,7 @@ from shutil import copyfile
 
 
 def run_dmriprep(dwi_file, bvec_file, bval_file,
-                 subjects_dir, working_dir, out_dir):
+                 subjects_dir, working_dir, out_dir, **kwargs):
 
     """
     Runs dmriprep for acquisitions with just one PE direction.
@@ -284,7 +284,7 @@ def run_dmriprep_pe(subject_id, dwi_file, dwi_file_AP, dwi_file_PA,
     --------
     dmriprep.run.get_dmriprep_pe_workflow
     """
-    wf = get_dmriprep_pe_workflow()
+    wf = get_dmriprep_base_workflow()
     wf.base_dir = op.join(op.abspath(working_dir), subject_id)
 
     inputspec = wf.get_node('inputspec')
@@ -306,7 +306,76 @@ def run_dmriprep_pe(subject_id, dwi_file, dwi_file_AP, dwi_file_PA,
     wf.run()
 
 
-def get_dmriprep_pe_workflow():
+def run_dmriprep_no_pe_with_eddy(subject_id, dwi_file,
+                    bvec_file, bval_file,
+                    subjects_dir, working_dir, out_dir,
+                    eddy_niter=5, slice_outlier_threshold=0.02, **kwargs):
+    """Run the dmriprep (phase encoded) nipype workflow
+
+    Parameters
+    ----------
+    subject_id : str
+        Subject identifier
+
+    dwi_file : str
+        Path to dwi nifti file
+
+    bvec_file : str
+        Path to bvec file
+
+    bval_file : str
+        Path to bval file
+
+    subjects_dir : str
+        Path to subject's freesurfer directory
+
+    working_dir : str
+        Path to workflow working directory
+
+    out_dir : str
+        Path to output directory
+
+    eddy_niter : int, default=5
+        Fixed number of eddy iterations. See
+        https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/eddy/UsersGuide#A--niter
+
+    slice_outlier_threshold: int or float
+        Number of allowed outlier slices per volume. If this is exceeded the
+        volume is dropped from analysis. If `slice_outlier_threshold` is an
+        int, it is treated as number of allowed outlier slices. If
+        `slice_outlier_threshold` is a float between 0 and 1 (exclusive), it is
+        treated the fraction of allowed outlier slices.
+
+    Notes
+    -----
+    This assumes that there are scans with phase-encode directions AP/PA for
+    topup.
+
+    See Also
+    --------
+    dmriprep.run.get_dmriprep_pe_workflow
+    """
+    wf = get_dmriprep_base_workflow(0)
+    wf.base_dir = op.join(op.abspath(working_dir), subject_id)
+
+    inputspec = wf.get_node('inputspec')
+    inputspec.inputs.subject_id = subject_id
+    inputspec.inputs.dwi_file = dwi_file
+    inputspec.inputs.bvec_file = bvec_file
+    inputspec.inputs.bval_file = bval_file
+    inputspec.inputs.subjects_dir = subjects_dir
+    inputspec.inputs.out_dir = op.abspath(out_dir)
+    inputspec.inputs.eddy_niter = eddy_niter
+    inputspec.inputs.slice_outlier_threshold = slice_outlier_threshold
+
+    # write the graph (this is saved to the working dir)
+    wf.write_graph()
+    wf.config['execution']['remove_unnecessary_outputs'] = False
+    wf.config['execution']['keep_inputs'] = True
+    wf.run()
+
+
+def get_dmriprep_base_workflow(use_reverse_phase_encode=True):
     """Return the dmriprep (phase encoded) nipype workflow
 
     Parameters
@@ -349,6 +418,12 @@ def get_dmriprep_pe_workflow():
     epi_pa = {'echospacing': 66.5e-3, 'enc_dir': 'y'}
     prep = all_fsl_pipeline(epi_params=epi_ap, altepi_params=epi_pa)
 
+    if not use_reverse_phase_encode:
+        peb_node = prep.get_node('peb_correction')
+        prep.remove_nodes([peb_node])
+
+
+
     # initialize an overall workflow
     wf = pe.Workflow(name="dmriprep")
 
@@ -361,6 +436,13 @@ def get_dmriprep_pe_workflow():
     eddy.inputs.repol = True
     eddy.inputs.cnr_maps = True
     eddy.inputs.residuals = True
+
+    if not use_reverse_phase_encode:
+        acqp_single_file = '/tmp/acqp.txt'
+        with open(acqp_single_file, 'w') as f:
+            f.write('0 1 0 .0665')
+        eddy.inputs.in_acqp = acqp_single_file
+
     import multiprocessing
     eddy.inputs.num_threads = multiprocessing.cpu_count()
     import numba.cuda
@@ -370,11 +452,12 @@ def get_dmriprep_pe_workflow():
     except:
         eddy.inputs.use_cuda = False
 
-    topup = prep.get_node('peb_correction.topup')
-    topup.inputs.checksize = True
+    if use_reverse_phase_encode:
+        topup = prep.get_node('peb_correction.topup')
+        topup.inputs.checksize = True
 
-    applytopup = prep.get_node('peb_correction.unwarp')
-    applytopup.inputs.checksize = True
+        applytopup = prep.get_node('peb_correction.unwarp')
+        applytopup.inputs.checksize = True
 
     eddy.inputs.checksize = True
 
@@ -384,10 +467,12 @@ def get_dmriprep_pe_workflow():
     wf.connect(prep, ('fsl_eddy.out_corrected', get_path), eddy_quad, 'base_name')
     wf.connect(inputspec, 'bval_file', eddy_quad, 'bval_file')
     wf.connect(prep, 'Rotate_Bvec.out_file', eddy_quad, 'bvec_file')
-    wf.connect(prep, 'peb_correction.topup.out_field', eddy_quad, 'field')
-    wf.connect(prep, 'gen_index.out_file', eddy_quad, 'idx_file')
-    wf.connect(prep, 'peb_correction.topup.out_enc_file', eddy_quad, 'param_file')
     wf.connect(prep, ('fsl_eddy.out_corrected', get_qc_path), eddy_quad, 'output_dir')
+    wf.connect(prep, 'gen_index.out_file', eddy_quad, 'idx_file')
+
+    if use_reverse_phase_encode:
+        wf.connect(prep, 'peb_correction.topup.out_enc_file', eddy_quad, 'param_file')
+        wf.connect(prep, 'peb_correction.topup.out_field', eddy_quad, 'field')
 
     # need a mask file for eddy_quad. lets get it from the B0.
     def get_b0_mask_fn(b0_file):
@@ -478,13 +563,15 @@ def get_dmriprep_pe_workflow():
     wf.connect(prep, "fsl_eddy.out_outlier_report",
                id_outliers_node, "outlier_report")
 
-    list_merge = pe.Node(niu.Merge(numinputs=2), name="list_merge")
-    wf.connect(inputspec, 'dwi_file_ap', list_merge, 'in1')
-    wf.connect(inputspec, 'dwi_file_pa', list_merge, 'in2')
 
-    merge = pe.Node(fsl.Merge(dimension='t'), name="mergeAPPA")
-    wf.connect(merge, 'merged_file', prep, 'inputnode.alt_file')
-    wf.connect(list_merge, 'out', merge, 'in_files')
+    if use_reverse_phase_encode:
+        list_merge = pe.Node(niu.Merge(numinputs=2), name="list_merge")
+        wf.connect(inputspec, 'dwi_file_ap', list_merge, 'in1')
+        wf.connect(inputspec, 'dwi_file_pa', list_merge, 'in2')
+
+        merge = pe.Node(fsl.Merge(dimension='t'), name="mergeAPPA")
+        wf.connect(merge, 'merged_file', prep, 'inputnode.alt_file')
+        wf.connect(list_merge, 'out', merge, 'in_files')
 
     fslroi = pe.Node(fsl.ExtractROI(t_min=0, t_size=1), name="fslroi")
     wf.connect(prep, "outputnode.out_file", fslroi, "in_file")

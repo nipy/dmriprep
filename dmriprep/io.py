@@ -26,14 +26,14 @@ def get_bids_subject_input_files(subject_id, bids_input_directory):
                          suffix='epi',
                          dir='AP',
                          extensions=['.nii', '.nii.gz'])
-    assert len(ap_file) == 1, 'found {} ap fieldmap files and we need just 1'.format(len(ap_file))
+    # assert len(ap_file) == 1, 'found {} ap fieldmap files and we need just 1'.format(len(ap_file))
 
     pa_file = layout.get(subject=subject_id,
                          datatype='fmap',
                          suffix='epi',
                          dir='PA',
                          extensions=['.nii', '.nii.gz'])
-    assert len(pa_file) == 1, 'found {} pa fieldmap files and we need just 1'.format(len(pa_file))
+    # assert len(pa_file) == 1, 'found {} pa fieldmap files and we need just 1'.format(len(pa_file))
 
     dwi_files = layout.get(subject=subject_id, datatype='dwi', suffix='dwi')
     valid_dwi_files = []
@@ -60,8 +60,8 @@ def get_bids_subject_input_files(subject_id, bids_input_directory):
 
     outputs = dict(subject_id="sub-"+subject_id,
                    dwi_file=dwi_file[0],
-                   dwi_file_AP=ap_file[0].path,
-                   dwi_file_PA=pa_file[0].path,
+                   dwi_file_AP=ap_file[0].path if len(ap_file) and len(pa_file) else None,
+                   dwi_file_PA=pa_file[0].path if len(ap_file) and len(pa_file) else None,
                    bvec_file=bvec_file[0],
                    bval_file=bval_file[0],
                    subjects_dir=op.abspath(subjects_dir))
